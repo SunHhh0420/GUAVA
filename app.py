@@ -331,4 +331,8 @@ if __name__ == "__main__":
         server_name="0.0.0.0", 
         allowed_paths=allowed_paths, 
         share=args.share,
+<<<<<<< HEAD
     )
+=======
+    )
+>>>>>>> 8be2b16 (update)
