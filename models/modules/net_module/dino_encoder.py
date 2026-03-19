@@ -4,6 +4,7 @@ import torchvision
 import torch.nn as nn
 import lightning as L
 
+
 class DINO_Enocder(L.LightningModule):
     def __init__(self, output_dim=128,output_dim_2=128,hidden_dims=256):
         super().__init__()

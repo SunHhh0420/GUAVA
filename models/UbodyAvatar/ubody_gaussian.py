@@ -339,7 +339,10 @@ class Ubody_Gaussian(L.LightningModule):
         
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
         elements = np.empty(xyz_all_np.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz_all_np, normals, f_dc, f_rest, opacities_all_np, scale_all_np, rotation_all_np), axis=1)
+        # make sure each component is a numpy ndarray
+        arrs = [xyz_all_np, normals, f_dc, f_rest, opacities_all_np, scale_all_np, rotation_all_np]
+        arrs = [np.asarray(a) for a in arrs]
+        attributes = np.concatenate(arrs, axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(os.path.join(save_path, 'GS_canonical.ply'))
@@ -355,7 +358,9 @@ class Ubody_Gaussian(L.LightningModule):
             f_dc = colors_smplx_np.transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
             f_rest=torch.empty((f_dc.shape[0],0,3))
             f_rest=f_rest.transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
-            attributes = np.concatenate((xyz_smplx_np, normals, f_dc, f_rest, opacities_smplx_np, scale_smplx_np, rotation_smplx_np), axis=1)
+            arrs = [xyz_smplx_np, normals, f_dc, f_rest, opacities_smplx_np, scale_smplx_np, rotation_smplx_np]
+            arrs = [np.asarray(a) for a in arrs]
+            attributes = np.concatenate(arrs, axis=1)
             elements = np.empty(xyz_smplx_np.shape[0], dtype=dtype_full)
             elements[:] = list(map(tuple, attributes))
             el = PlyElement.describe(elements, 'vertex')

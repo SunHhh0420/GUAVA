@@ -34,12 +34,37 @@ class LMDBEngine:
         payload = self._lmdb_txn.get(key_name.encode())
         if payload is None:
             raise KeyError('Key:{} Not Found!'.format(key_name))
+        # ensure bytes sequence (lmdb may return memoryview or bytearray)
         try:
-            image_buf = torch.tensor(np.frombuffer(payload, dtype=np.uint8))
-            data = torchvision.io.decode_image(image_buf, mode=torchvision.io.ImageReadMode.RGB)
-        except:
-            data = torch.load(io.BytesIO(payload), weights_only=True)
-        return data
+            payload = bytes(payload)
+        except Exception:
+            # fallback: use memoryview
+            try:
+                payload = memoryview(payload).tobytes()
+            except Exception:
+                raise RuntimeError(f"Unable to convert LMDB payload for key {key_name} to bytes")
+
+        # inspect header bytes for common image signatures (JPEG, PNG)
+        if payload[:2] == b'\xff\xd8' or payload.startswith(b'\x89PNG'):
+            # treat as encoded image
+            buf = np.frombuffer(payload, dtype=np.uint8)
+            if buf.size > 0:
+                # convert to torch tensor without numpy class issues
+                tensor_buf = torch.as_tensor(buf, dtype=torch.uint8)
+                try:
+                    return torchvision.io.decode_image(tensor_buf, mode=torchvision.io.ImageReadMode.RGB)
+                except Exception:
+                    # fallback to torch loading if decode fails
+                    return torch.load(io.BytesIO(payload))
+
+        # not an obvious image; attempt torch.load directly
+        try:
+            return torch.load(io.BytesIO(payload))
+        except Exception:
+            try:
+                return torch.load(io.BytesIO(payload), weights_only=False)
+            except Exception:
+                raise
 
     def __del__(self,):
         if not self._manual_close:
@@ -52,8 +77,11 @@ class LMDBEngine:
         if payload is None:
             raise KeyError('Key:{} Not Found!'.format(key_name))
         if type == 'torch':
-            torch_data = torch.load(io.BytesIO(payload), weights_only=True)
-            return torch_data
+            try:
+                return torch.load(io.BytesIO(payload))
+            except Exception:
+                # try weights_only=False as last resort
+                return torch.load(io.BytesIO(payload), weights_only=False)
         elif type == 'image':
             image_buf = torch.tensor(np.frombuffer(payload, dtype=np.uint8))
             if 'mode' in kwargs.keys():

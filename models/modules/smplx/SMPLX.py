@@ -179,34 +179,39 @@ class SMPLX(nn.Module):
                 if name in J14_NAMES:
                     source.append(idx)
                     target.append(J14_NAMES.index(name))
-            source = np.asarray(source)
-            target = np.asarray(target)
-            self.register_buffer('source_idxs', torch.from_numpy(source))
-            self.register_buffer('target_idxs', torch.from_numpy(target))
-            joint_regressor = torch.from_numpy(
-                j14_regressor).to(dtype=torch.float32)
+            source = np.array(source, dtype=np.int64)
+            target = np.array(target, dtype=np.int64)
+            self.register_buffer('source_idxs', torch.tensor(source, dtype=torch.long))
+            self.register_buffer('target_idxs', torch.tensor(target, dtype=torch.long))
+            joint_regressor = torch.tensor(
+                j14_regressor, dtype=torch.float32)
             self.register_buffer('extra_joint_regressor', joint_regressor)
             self.part_indices = part_indices
         
         self.smplx2flame_ind = np.load(osp.join(smplx_assets_dir, 'SMPL-X__FLAME_vertex_ids.npy'))
-        self.register_buffer('face_l_eyelid', torch.from_numpy(np.load(osp.join(smplx_assets_dir, 'flame_l_eyelid.npy'))).to(self.dtype)[None])
-        self.register_buffer('face_r_eyelid', torch.from_numpy(np.load(osp.join(smplx_assets_dir, 'flame_r_eyelid.npy'))).to(self.dtype)[None])
+        self.smplx2flame_ind = torch.tensor(self.smplx2flame_ind, dtype=torch.long)
+        self.register_buffer('face_l_eyelid', torch.tensor(np.load(osp.join(smplx_assets_dir, 'flame_l_eyelid.npy')), dtype=self.dtype)[None])
+        self.register_buffer('face_r_eyelid', torch.tensor(np.load(osp.join(smplx_assets_dir, 'flame_r_eyelid.npy')), dtype=self.dtype)[None])
 
         lmk_embeddings_mp = np.load(osp.join(smplx_assets_dir, "mediapipe_landmark_embedding.npz"))
-        self.register_buffer('mp_lmk_faces_idx', torch.from_numpy(lmk_embeddings_mp['lmk_face_idx'].astype('int32')).long())
-        self.register_buffer('mp_lmk_bary_coords', torch.from_numpy(lmk_embeddings_mp['lmk_b_coords']).to(self.dtype))
+        self.register_buffer('mp_lmk_faces_idx', torch.tensor(lmk_embeddings_mp['lmk_face_idx'].astype('int32'), dtype=torch.long))
+        self.register_buffer('mp_lmk_bary_coords', torch.tensor(lmk_embeddings_mp['lmk_b_coords'], dtype=self.dtype))
         self.lmk_mp_indices = lmk_embeddings_mp['landmark_indices'].tolist()
 
         with open(osp.join(smplx_assets_dir, 'MANO_SMPLX_vertex_ids.pkl'), 'rb') as fid:
-            self.smplx2mano_ind = pickle.load(fid, encoding='latin1')
+            smplx2mano_ind_raw = pickle.load(fid, encoding='latin1')
+            self.smplx2mano_ind = {
+                'left_hand': torch.tensor(smplx2mano_ind_raw['left_hand'], dtype=torch.long),
+                'right_hand': torch.tensor(smplx2mano_ind_raw['right_hand'], dtype=torch.long)
+            }
 
         self.using_lmk203 = False
         lmk203_path = osp.join(smplx_assets_dir, "203_landmark_embeding.npz")
         if osp.exists(lmk203_path):
             self.using_lmk203 = True
             lmk_embeddings_203 = np.load(lmk203_path)
-            self.register_buffer('lmk_203_faces_idx', torch.from_numpy(lmk_embeddings_203['lmk_face_idx'].astype('int32')).long())
-            self.register_buffer('lmk_203_bary_coords', torch.from_numpy(lmk_embeddings_203['lmk_b_coords']).to(self.dtype))
+            self.register_buffer('lmk_203_faces_idx', torch.tensor(lmk_embeddings_203['lmk_face_idx'].astype('int32'), dtype=torch.long))
+            self.register_buffer('lmk_203_bary_coords', torch.tensor(lmk_embeddings_203['lmk_b_coords'], dtype=self.dtype))
             self.lmk_203_front_indices = lmk_embeddings_203['landmark_front_indices'].tolist()
             self.lmk_203_left_indices  = lmk_embeddings_203['landmark_left_indices']
             self.lmk_203_right_indices = lmk_embeddings_203['landmark_right_indices']
@@ -492,7 +497,7 @@ class SMPLX(nn.Module):
         vid_teeth_lower = torch.cat([vid_teeth_lower_root, vid_teeth_lower_edge, vid_teeth_lower_root_back, vid_teeth_lower_edge_back], dim=0)
         vid_teeth = torch.cat([vid_teeth_upper, vid_teeth_lower], dim=0)
         
-        self.smplx2flame_ind=np.concatenate((self.smplx2flame_ind,vid_teeth.numpy()),axis=0)
+        self.smplx2flame_ind=torch.cat([self.smplx2flame_ind, vid_teeth], dim=0)
         # u = torch.linspace(0.244, 0.342, 15)
         # v = torch.linspace(0.0097, 0.078, 7)
         u = torch.linspace(0.1328, 0.2695, 15)
@@ -735,10 +740,10 @@ def get_face_per_pixel(mask, flist):
 
 def load_masks(PROJECT_DIR, posmap_size=512, body_model='smplx'):
     uv_mask_faceid = np.load(join(PROJECT_DIR, 'uv_masks', 'uv_mask{}_with_faceid_{}.npy'.format(posmap_size, body_model))).reshape(posmap_size, posmap_size)
-    uv_mask_faceid = torch.from_numpy(uv_mask_faceid).long()
+    uv_mask_faceid = torch.tensor(uv_mask_faceid, dtype=torch.long)
     
     smpl_faces = np.load(join(PROJECT_DIR, '{}_faces.npy'.format(body_model.lower()))) # faces = triangle list of the body mesh
-    flist = torch.tensor(smpl_faces.astype(np.int32)).long()
+    flist = torch.tensor(smpl_faces.astype(np.int32), dtype=torch.long)
     flist_uv = get_face_per_pixel(uv_mask_faceid, flist) # Each (valid) pixel on the uv map corresponds to a point on the SMPL body; flist_uv is a list of these triangles
 
     points_idx_from_posmap = (uv_mask_faceid!=-1).reshape(-1)
@@ -792,36 +797,60 @@ def get_vertex_uv_coord(vertices,faces,faces_t,texcoords):
             vertex_texcoords[v_idx] = texcoords[vt_idx]
     return vertex_texcoords
 
-def get_uvmap_faces_index(faces_uv,uv_coords,uv_size=512):
-    uv_coords=np.round(uv_coords*uv_size).astype(np.int32)
-    faces_uv=faces_uv.astype(np.int32)
-    uvmap_faces_idx = np.ones((uv_size,uv_size), dtype=np.int32) * -1
-    for f_idx in range(len(faces_uv)):
-        cv2.drawContours(uvmap_faces_idx, [uv_coords[faces_uv[f_idx]]], 0, int(f_idx), -1)
+def get_uvmap_faces_index(faces_uv, uv_coords, uv_size=512):
+    # Ensure inputs are numpy arrays with correct types
+    faces_uv = np.asarray(faces_uv)
+    uv_coords = np.asarray(uv_coords)
+    
+    # Convert to int32 for indexing
+    uv_coords = np.round(uv_coords * uv_size).astype(np.int32)
+    faces_uv = faces_uv.astype(np.int32)
+    
+    # Use int32 for compatibility with OpenCV
+    uvmap_faces_idx = np.full((uv_size, uv_size), -1, dtype=np.int32)
+    n_faces = len(faces_uv)
+    
+    for f_idx in range(n_faces):
+        # Get face indices and ensure they're proper integers
+        face_indices = tuple(faces_uv[f_idx].tolist())
+        contour = uv_coords[list(face_indices)]
+        # Use fillPoly instead of drawContours for better OpenCV compatibility
+        cv2.fillPoly(uvmap_faces_idx, [contour], f_idx)
     return uvmap_faces_idx
 
 def get_uvmap_faces_barycoord(uvmap_faces_idx,faces_uv,uv_coords,uv_size=512):
-    uv_coords=np.round(uv_coords*uv_size).astype(np.int32)
-    uvmap_faces_barycoord = np.zeros((uv_size,uv_size,3), dtype=np.float32)
+    # ensure numpy arrays with correct dtypes to avoid object arrays
+    faces_uv = np.asarray(faces_uv, dtype=np.int32)
+    uv_coords = np.asarray(uv_coords, dtype=np.float32)
+    if faces_uv.ndim != 2 or faces_uv.shape[1] < 3:
+        raise ValueError(f"faces_uv must be Nx3, got {faces_uv.shape}")
+    if uv_coords.ndim != 2 or uv_coords.shape[1] < 2:
+        raise ValueError(f"uv_coords must be Nx2, got {uv_coords.shape}")
+
+    uv_coords = np.round(uv_coords * uv_size).astype(np.int32)
+    uvmap_faces_barycoord = np.zeros((uv_size, uv_size, 3), dtype=np.float32)
     for u_idx in range(uv_size):
         for v_idx in range(uv_size):
-            f_idx=uvmap_faces_idx[v_idx,u_idx]
-            if f_idx==-1:
+            f_idx = uvmap_faces_idx[v_idx, u_idx]
+            if f_idx == -1:
                 continue
-            v_uvs=uv_coords[faces_uv[f_idx]]
-            v_uv0=v_uvs[0]
-            v_uv1=v_uvs[1]
-            v_uv2=v_uvs[2]
-            c_uv=np.array([u_idx,v_idx])
-            
-            c_0=c_uv-v_uv0
-            c_1=c_uv-v_uv1
-            c_2=c_uv-v_uv2
-            area0=0.5*np.abs(np.cross(c_1,c_2))
-            area1=0.5*np.abs(np.cross(c_0,c_2))
-            area2=0.5*np.abs(np.cross(c_0,c_1))
-            total_area=area0+area1+area2+1e-6
-            uvmap_faces_barycoord[v_idx,u_idx]=np.array([area0,area1,area2])/total_area
+            # faces_uv[f_idx] is a length-3 int32 vector
+            idxs = faces_uv[f_idx]
+            v_uvs = uv_coords[idxs]
+            # ensure each vertex coordinate is a 1D int array
+            v_uv0 = v_uvs[0].astype(np.int32)
+            v_uv1 = v_uvs[1].astype(np.int32)
+            v_uv2 = v_uvs[2].astype(np.int32)
+            c_uv = np.array([u_idx, v_idx], dtype=np.int32)
+
+            c_0 = c_uv - v_uv0
+            c_1 = c_uv - v_uv1
+            c_2 = c_uv - v_uv2
+            area0 = 0.5 * np.abs(np.cross(c_1, c_2))
+            area1 = 0.5 * np.abs(np.cross(c_0, c_2))
+            area2 = 0.5 * np.abs(np.cross(c_0, c_1))
+            total_area = area0 + area1 + area2 + 1e-6
+            uvmap_faces_barycoord[v_idx, u_idx] = np.array([area0, area1, area2], dtype=np.float32) / total_area
     return uvmap_faces_barycoord
 
 def cv2_triangle(img, p123):
@@ -839,9 +868,9 @@ class OBJLoader:
         self.faces = []      #  f  face
 
         self.load_obj(filepath)
-        self.vertices=np.array(self.vertices)
-        self.texcoords=np.array(self.texcoords)
-        self.faces=np.array(self.faces)
+        self.vertices=np.array(self.vertices, dtype=np.float64)
+        self.texcoords=np.array(self.texcoords, dtype=np.float64)
+        self.faces=np.array(self.faces, dtype=np.int64)
         
     def load_obj(self, filepath):
         try:
@@ -858,7 +887,7 @@ class OBJLoader:
                         for vert in line.split()[1:]:
                            #-1
                             parts = vert.split('/')
-                            face.append(tuple(int(p)-1 if p else 0 for p in parts))
+                            face.append([int(p)-1 if p else 0 for p in parts])
                         self.faces.append(face)
         except Exception as e:
             print(f"Error loading OBJ file: {e}")

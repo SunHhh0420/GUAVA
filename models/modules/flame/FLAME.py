@@ -102,8 +102,8 @@ class FLAME(nn.Module):
         self.register_buffer('parents', parents)
         self.register_buffer('lbs_weights', to_tensor(to_np(flame_model.weights), dtype=self.dtype))
 
-        self.register_buffer('l_eyelid', torch.from_numpy(np.load(osp.join(flame_assets_dir, 'l_eyelid.npy'))).to(self.dtype)[None])
-        self.register_buffer('r_eyelid', torch.from_numpy(np.load(osp.join(flame_assets_dir, 'r_eyelid.npy'))).to(self.dtype)[None])
+        self.register_buffer('l_eyelid', torch.tensor(np.load(osp.join(flame_assets_dir, 'l_eyelid.npy')), dtype=self.dtype)[None])
+        self.register_buffer('r_eyelid', torch.tensor(np.load(osp.join(flame_assets_dir, 'r_eyelid.npy')), dtype=self.dtype)[None])
 
         # Fixing Eyeball and neck rotation
         default_eyball_pose = torch.zeros([1, 6], dtype=self.dtype, requires_grad=False)
@@ -116,12 +116,12 @@ class FLAME(nn.Module):
         # Static and Dynamic Landmark embeddings for FLAME
         lmk_embeddings = np.load(flame_lmk_embedding_path, allow_pickle=True, encoding='latin1')
         lmk_embeddings = lmk_embeddings[()]
-        self.register_buffer('lmk_faces_idx', torch.from_numpy(lmk_embeddings['static_lmk_faces_idx']).long())
-        self.register_buffer('lmk_bary_coords', torch.from_numpy(lmk_embeddings['static_lmk_bary_coords']).to(self.dtype))
-        self.register_buffer('dynamic_lmk_faces_idx', lmk_embeddings['dynamic_lmk_faces_idx'].long())
-        self.register_buffer('dynamic_lmk_bary_coords', lmk_embeddings['dynamic_lmk_bary_coords'].to(self.dtype))
-        self.register_buffer('full_lmk_faces_idx', torch.from_numpy(lmk_embeddings['full_lmk_faces_idx']).long())
-        self.register_buffer('full_lmk_bary_coords', torch.from_numpy(lmk_embeddings['full_lmk_bary_coords']).to(self.dtype))
+        self.register_buffer('lmk_faces_idx', torch.tensor(lmk_embeddings['static_lmk_faces_idx'], dtype=torch.long))
+        self.register_buffer('lmk_bary_coords', torch.tensor(lmk_embeddings['static_lmk_bary_coords'], dtype=self.dtype))
+        self.register_buffer('dynamic_lmk_faces_idx', torch.tensor(lmk_embeddings['dynamic_lmk_faces_idx'], dtype=torch.long))
+        self.register_buffer('dynamic_lmk_bary_coords', torch.tensor(lmk_embeddings['dynamic_lmk_bary_coords'], dtype=self.dtype))
+        self.register_buffer('full_lmk_faces_idx', torch.tensor(lmk_embeddings['full_lmk_faces_idx'], dtype=torch.long))
+        self.register_buffer('full_lmk_bary_coords', torch.tensor(lmk_embeddings['full_lmk_bary_coords'], dtype=self.dtype))
 
         neck_kin_chain = []; NECK_IDX=1
         curr_idx = torch.tensor(NECK_IDX, dtype=torch.long)
@@ -131,8 +131,8 @@ class FLAME(nn.Module):
         self.register_buffer('neck_kin_chain', torch.stack(neck_kin_chain))
 
         lmk_embeddings_mp = np.load(osp.join(flame_assets_dir, "mediapipe_landmark_embedding.npz"))
-        self.register_buffer('mp_lmk_faces_idx', torch.from_numpy(lmk_embeddings_mp['lmk_face_idx'].astype('int32')).long())
-        self.register_buffer('mp_lmk_bary_coords', torch.from_numpy(lmk_embeddings_mp['lmk_b_coords']).to(self.dtype))
+        self.register_buffer('mp_lmk_faces_idx', torch.tensor(lmk_embeddings_mp['lmk_face_idx'].astype('int32'), dtype=torch.long))
+        self.register_buffer('mp_lmk_bary_coords', torch.tensor(lmk_embeddings_mp['lmk_b_coords'], dtype=self.dtype))
         self.lmk_mp_indices = lmk_embeddings_mp['landmark_indices'].tolist()
 
         self.using_lmk203 = False
@@ -140,8 +140,8 @@ class FLAME(nn.Module):
         if osp.exists(lmk203_path):
             self.using_lmk203 = True
             lmk_embeddings_203 = np.load(lmk203_path)
-            self.register_buffer('lmk_203_faces_idx', torch.from_numpy(lmk_embeddings_203['lmk_face_idx'].astype('int32')).long())
-            self.register_buffer('lmk_203_bary_coords', torch.from_numpy(lmk_embeddings_203['lmk_b_coords']).to(self.dtype))
+            self.register_buffer('lmk_203_faces_idx', torch.tensor(lmk_embeddings_203['lmk_face_idx'].astype('int32'), dtype=torch.long))
+            self.register_buffer('lmk_203_bary_coords', torch.tensor(lmk_embeddings_203['lmk_b_coords'], dtype=self.dtype))
             self.lmk_203_mouth_indices = lmk_embeddings_203['landmark_mouth_indices']
             self.lmk_203_front_indices = lmk_embeddings_203['landmark_front_indices']
             self.lmk_203_left_indices  = lmk_embeddings_203['landmark_left_indices']
@@ -156,16 +156,19 @@ class FLAME(nn.Module):
             texture_mean = tex_space[mu_key].reshape(1, -1)/255.
             texture_basis = tex_space[pc_key].reshape(-1, n_pc)/255.
 
-            texture_mean = torch.from_numpy(texture_mean).float()[None,...]
-            texture_basis = torch.from_numpy(texture_basis).float()[None,...]
+            texture_mean = torch.tensor(texture_mean, dtype=torch.float32)[None,...]
+            texture_basis = torch.tensor(texture_basis, dtype=torch.float32)[None,...]
             self.register_buffer('texture_mean', texture_mean)
             self.register_buffer('texture_basis', texture_basis)
         
-        self.head_index = np.array(list(range(self.n_ori_verts)))
+        self.head_index = torch.tensor(list(range(self.n_ori_verts)), dtype=torch.long)
         lowerhead_mask_fp = osp.join(flame_assets_dir, 'selected_lowerhead.npy')
         if osp.exists(lowerhead_mask_fp):
             lowerhead_mask = np.load(lowerhead_mask_fp)
-            self.head_index = self.head_index[~np.isin(self.head_index, lowerhead_mask)]
+            lowerhead_mask = torch.tensor(lowerhead_mask, dtype=torch.long)
+            mask = torch.ones(self.head_index.shape[0], dtype=torch.bool)
+            mask[lowerhead_mask] = False
+            self.head_index = self.head_index[mask]
             
         _, faces, aux = load_obj(osp.join(flame_assets_dir, 'head_template.obj'), load_textures=False)
         self.textures_idx=faces.textures_idx
@@ -420,7 +423,7 @@ class FLAME(nn.Module):
         vid_teeth_lower = torch.cat([vid_teeth_lower_root, vid_teeth_lower_edge, vid_teeth_lower_root_back, vid_teeth_lower_edge_back], dim=0)
         vid_teeth = torch.cat([vid_teeth_upper, vid_teeth_lower], dim=0)
         
-        self.head_index=np.concatenate((self.head_index,vid_teeth.numpy()),axis=0)
+        self.head_index=torch.cat([self.head_index, vid_teeth], dim=0)
         
         # update vertex masks
         self.mask.v.register_buffer("teeth_upper", vid_teeth_upper)

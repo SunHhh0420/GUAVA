@@ -418,7 +418,7 @@ class BaseMeshRenderer(L.LightningModule):
         images = None
         if ret_image:
             # Initialize each vertex to be white in color.
-            verts_rgb = torch.from_numpy(self.skin_color/255).float().to(self.device)[None, None, :].repeat(B, V, 1)
+            verts_rgb = torch.tensor(self.skin_color/255, dtype=torch.float32).to(self.device)[None, None, :].repeat(B, V, 1)
             textures = TexturesVertex(verts_features=verts_rgb)
             mesh = Meshes(
                 verts=vertices.to(self.device),

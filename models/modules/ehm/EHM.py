@@ -117,7 +117,17 @@ class EHM(nn.Module):
         tbody_joints = vertices2joints(self.smplx.J_regressor, new_template_vertices)
         if joints_offset is not None: tbody_joints=tbody_joints+joints_offset
 
-        if not hasattr(self, 'head_index'): self.head_index = np.unique(self.flame.head_index)
+        if not hasattr(self, 'head_index'):
+            # ensure head_index is an integer tensor (avoid numpy dtype issues)
+            try:
+                hi = self.flame.head_index
+                if hasattr(hi, 'cpu'):
+                    hi = hi.cpu().numpy()
+                hi = np.asarray(hi, dtype=np.int64)
+            except Exception:
+                hi = np.array(self.flame.head_index, dtype=np.int64)
+            hi = np.unique(hi)
+            self.head_index = torch.tensor(hi, dtype=torch.long)
         if head_vertices is not None:
             selected_head = new_template_vertices[:, self.smplx.smplx2flame_ind]
             selected_head = head_vertices - head_joints[:, 3:5].mean(dim=1, keepdim=True) + tbody_joints[:, 23:25].mean(dim=1, keepdim=True)
