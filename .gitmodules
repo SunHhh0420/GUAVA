@@ -1,3 +1,7 @@
 [submodule "EHM-Tracker"]
 	path = EHM-Tracker
 	url = https://github.com/Pixel-Talk/EHM-Tracker
+
+[submodule "chumpy"]
+	path = chumpy
+	url = git@github.com:mattloper/chumpy.git
